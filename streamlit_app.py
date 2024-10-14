@@ -9,8 +9,11 @@ import streamlit as st
 
 # Streamlit App
 def main():
+
+    # 1. Business Understanding: Predict house prices
     st.title("House Price Prediction with Linear Regression")
 
+    # 2. Data Understanding: Generate a dataset of houses
     # User inputs
     st.sidebar.header("User Inputs")
     num_houses = st.sidebar.slider("Number of Houses", min_value=10, max_value=1000, value=100, step=10)
@@ -35,17 +38,20 @@ def main():
         'Price': prices
     })
 
-    # Prepare data
+    # 3. Data Preparation
+    # Prepare data # Features (X) and target (y)
     X = df[['Size', 'Bedrooms']]
     y = df['Price']
 
     # Split data into training and testing sets based on user-defined percentage
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=1-train_size, random_state=42)
 
+    # 4. Modeling: Create and train the linear regression model
     # Create and train the linear regression model
     model = LinearRegression()
     model.fit(X_train, y_train)
 
+    # 5. Evaluation: Make predictions on the test set
     # Fix the number of bedrooms for predictions to ensure points are on the regression line
     bedrooms_constant = 3
     X_test_fixed = X_test.copy()
@@ -58,6 +64,7 @@ def main():
     mse = mean_squared_error(y_test, y_pred_fixed)
     r2 = r2_score(y_test, y_pred_fixed)
 
+    # 6. Visualizing with testing data points and regression line
     # Display results
     st.subheader("Model Evaluation Metrics")
     st.write(f"Mean Squared Error: {mse:.2f}")
