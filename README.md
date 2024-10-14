@@ -1,3 +1,7 @@
+# :earth_americas: ChatGPT conversation
+
+https://chatgpt.com/share/670cc30e-8040-8006-8f00-cec873ffedba
+
 # :earth_americas: GDP dashboard template
 
 A simple Streamlit app showing the GDP of different countries in the world.
