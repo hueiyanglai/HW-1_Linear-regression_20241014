@@ -1,151 +1,94 @@
-import streamlit as st
+# streamlit_app.py
 import pandas as pd
-import math
-from pathlib import Path
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error, r2_score
+import matplotlib.pyplot as plt
+import streamlit as st
 
-# Set the title and favicon that appear in the Browser's tab bar.
-st.set_page_config(
-    page_title='GDP dashboard',
-    page_icon=':earth_americas:', # This is an emoji shortcode. Could be a URL too.
-)
+# Streamlit App
+def main():
+    st.title("House Price Prediction with Linear Regression")
 
-# -----------------------------------------------------------------------------
-# Declare some useful functions.
+    # User inputs
+    st.sidebar.header("User Inputs")
+    num_houses = st.sidebar.slider("Number of Houses", min_value=10, max_value=1000, value=100, step=10)
+    std_dev_noise = st.sidebar.slider("Standard Deviation of Noise", min_value=10000, max_value=100000, value=30000, step=5000)
+    train_size = st.sidebar.slider("Percentage of Training Data", min_value=10, max_value=90, value=80, step=10) / 100.0
 
-@st.cache_data
-def get_gdp_data():
-    """Grab GDP data from a CSV file.
+    # Generate random data for houses
+    np.random.seed(42)  # For reproducibility
+    sizes = np.random.randint(1000, 4000, size=num_houses)  # House size between 1000 and 4000 sqft
+    bedrooms = np.random.randint(1, 6, size=num_houses)     # Bedrooms between 1 and 5
 
-    This uses caching to avoid having to read the file every time. If we were
-    reading from an HTTP endpoint instead of a file, it's a good idea to set
-    a maximum age to the cache with the TTL argument: @st.cache_data(ttl='1d')
-    """
+    # Add normally distributed noise with user-defined standard deviation
+    noise = np.random.normal(0, std_dev_noise, size=num_houses)
 
-    # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
-    DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
-    raw_gdp_df = pd.read_csv(DATA_FILENAME)
+    # Calculate prices with a base formula and noise
+    prices = sizes * 150 + bedrooms * 10000 + noise
 
-    MIN_YEAR = 1960
-    MAX_YEAR = 2022
+    # Create DataFrame
+    df = pd.DataFrame({
+        'Size': sizes,
+        'Bedrooms': bedrooms,
+        'Price': prices
+    })
 
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
-    gdp_df = raw_gdp_df.melt(
-        ['Country Code'],
-        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
-        'Year',
-        'GDP',
-    )
+    # Prepare data
+    X = df[['Size', 'Bedrooms']]
+    y = df['Price']
 
-    # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
+    # Split data into training and testing sets based on user-defined percentage
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=1-train_size, random_state=42)
 
-    return gdp_df
+    # Create and train the linear regression model
+    model = LinearRegression()
+    model.fit(X_train, y_train)
 
-gdp_df = get_gdp_data()
+    # Fix the number of bedrooms for predictions to ensure points are on the regression line
+    bedrooms_constant = 3
+    X_test_fixed = X_test.copy()
+    X_test_fixed['Bedrooms'] = bedrooms_constant  # Set bedrooms to constant value
 
-# -----------------------------------------------------------------------------
-# Draw the actual page
+    # Predict using the fixed number of bedrooms
+    y_pred_fixed = model.predict(X_test_fixed)
 
-# Set the title that appears at the top of the page.
-'''
-# :earth_americas: GDP dashboard
+    # Evaluate the model
+    mse = mean_squared_error(y_test, y_pred_fixed)
+    r2 = r2_score(y_test, y_pred_fixed)
 
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
-notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
-But it's otherwise a great (and did I mention _free_?) source of data.
-'''
+    # Display results
+    st.subheader("Model Evaluation Metrics")
+    st.write(f"Mean Squared Error: {mse:.2f}")
+    st.write(f"R-squared: {r2:.2f}")
 
-# Add some spacing
-''
-''
+    # Plotting
+    fig, ax = plt.subplots()
+    sorted_idx = X_test['Size'].argsort()
+    X_test_sorted = X_test.iloc[sorted_idx]
+    y_test_sorted = y_test.iloc[sorted_idx]
+    y_pred_sorted = y_pred_fixed[sorted_idx]
 
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
+    # Plot the actual vs predicted values for the test data
+    ax.scatter(X_test_sorted['Size'], y_test_sorted, color='black', label='Actual Price (Test Points)', alpha=0.6)
+    ax.scatter(X_test_sorted['Size'], y_pred_sorted, color='red', label='Predicted Price (Test Points)', marker='x', alpha=0.8)
 
-from_year, to_year = st.slider(
-    'Which years are you interested in?',
-    min_value=min_value,
-    max_value=max_value,
-    value=[min_value, max_value])
+    # Generate a regression line using the 'Size' feature while keeping 'Bedrooms' constant
+    size_range = np.linspace(X_test_sorted['Size'].min(), X_test_sorted['Size'].max(), 100)
+    predicted_regression_line = model.predict(pd.DataFrame({'Size': size_range, 'Bedrooms': [bedrooms_constant] * 100}))
 
-countries = gdp_df['Country Code'].unique()
+    # Plot the regression line
+    ax.plot(size_range, predicted_regression_line, color='blue', label='Regression Line')
 
-if not len(countries):
-    st.warning("Select at least one country")
+    # Add labels and legend
+    ax.set_xlabel('Size of House (sqft)')
+    ax.set_ylabel('Price')
+    ax.set_title('House Price Prediction')
+    ax.legend()
 
-selected_countries = st.multiselect(
-    'Which countries would you like to view?',
-    countries,
-    ['DEU', 'FRA', 'GBR', 'BRA', 'MEX', 'JPN'])
+    # Show the plot in Streamlit
+    st.pyplot(fig)
 
-''
-''
-''
-
-# Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
-]
-
-st.header('GDP over time', divider='gray')
-
-''
-
-st.line_chart(
-    filtered_gdp_df,
-    x='Year',
-    y='GDP',
-    color='Country Code',
-)
-
-''
-''
-
-
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
-
-st.header(f'GDP in {to_year}', divider='gray')
-
-''
-
-cols = st.columns(4)
-
-for i, country in enumerate(selected_countries):
-    col = cols[i % len(cols)]
-
-    with col:
-        first_gdp = first_year[first_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[last_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-
-        if math.isnan(first_gdp):
-            growth = 'n/a'
-            delta_color = 'off'
-        else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
-            delta_color = 'normal'
-
-        st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
-            delta=growth,
-            delta_color=delta_color
-        )
+if __name__ == "__main__":
+    main()
